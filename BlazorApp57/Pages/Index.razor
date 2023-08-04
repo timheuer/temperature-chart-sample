@@ -1,0 +1,65 @@
+﻿@page "/"
+@using TempStick;
+@inject IConfiguration config
+<PageTitle>Index</PageTitle>
+
+<h1>Sensor Information</h1>
+<h2>@FridgeName (Current Temp: @CurrentTemp F)</h2>
+
+<div>
+    <MudChart ChartType="ChartType.Line" ChartSeries="@Series" XAxisLabels="@XAxisLabels" Width="100%" Height="350px"></MudChart>
+</div>
+
+@code {
+    private ChartOptions options = new ChartOptions();
+    public List<ChartSeries> Series = new List<ChartSeries>();
+    public string FridgeName = "Fridge";
+    public string[] XAxisLabels = new string[] { "", "" };
+    public double CurrentTemp = 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        options.InterpolationOption = InterpolationOption.NaturalSpline;
+        options.YAxisFormat = "c2";
+        await GetData();
+    }
+
+    public async Task GetData()
+    {
+        HttpClient http = new HttpClient();
+        http.DefaultRequestHeaders.Add("X-API-KEY", config["API_KEY"]);
+
+
+        TempStickClient client = new TempStickClient(http);
+        var sensorInfo = await client.GetSensorAsync(config["SENSOR_ID"]);
+        FridgeName = sensorInfo.Data.Sensor_name;
+        CurrentTemp = sensorInfo.Data.Last_temp.ToFarenheit();
+        
+        //var data = await client.GetReadingsAsync(config["SENSOR_ID"], 32400, "24_hours", null, null);
+        var data = await client.GetReadingsAsync(config["SENSOR_ID"]);
+        
+        var new_series = new List<ChartSeries>();
+        var new_temps = new ChartSeries() { Name = "Temperature" };
+        var new_hums = new ChartSeries() { Name = "Humidity" };
+
+        List<double> temps = new();
+        List<double> hums = new();
+        List<string> label = new();
+
+        foreach (var item in data.Data.Readings)
+        {
+            label.Add(item.Sensor_time);
+            temps.Add(item.Temperature.ToFarenheit());
+            hums.Add(item.Humidity);
+        }
+        new_temps.Data = temps.ToArray();
+        new_hums.Data = hums.ToArray();
+        XAxisLabels = label.ToArray();
+
+        new_series.Add(new_temps);
+        new_series.Add(new_hums);
+
+        Series = new_series;
+        StateHasChanged();
+    }
+}
